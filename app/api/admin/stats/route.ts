@@ -2,11 +2,9 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getUserFromCookie } from '@/lib/auth';
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
-
 export async function GET() {
   const user = await getUserFromCookie();
-  if (!user || !ADMIN_EMAIL || user.email !== ADMIN_EMAIL) {
+  if (!user || user.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
