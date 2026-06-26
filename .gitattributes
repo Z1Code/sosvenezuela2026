@@ -1,0 +1,13 @@
+# Normaliza los finales de línea a LF en el repo (consistencia Windows/Linux/Docker)
+* text=auto eol=lf
+
+# Binarios: no tocar
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.ico -text
+*.webp -text
+*.woff -text
+*.woff2 -text
+*.ttf -text

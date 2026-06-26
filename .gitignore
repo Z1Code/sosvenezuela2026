@@ -30,8 +30,23 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — NUNCA subir secretos. Solo se versiona la plantilla .env.example
+.env
+.env.*
+!.env.example
+
+# secretos / credenciales sueltas (por si acaso)
+*.key
+*.p12
+*.crt
+*-key.json
+service-account*.json
+
+# scripts/volcados temporales de mantenimiento
+_*.cjs
+*.output
+*.sql.gz
+*.dump
 
 # vercel
 .vercel

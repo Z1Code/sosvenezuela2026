@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SOS Venezuela 2026
 
-## Getting Started
+Plataforma civil y humanitaria creada tras el terremoto del 24 de junio de 2026 en Venezuela (M7.2 / M7.5, costa de Falcón–Carabobo). Centraliza **reportes de daños estructurales**, un **directorio público de personas desaparecidas/encontradas**, **centros de acopio** y coordinación comunitaria, con datos agregados de múltiples plataformas ciudadanas.
 
-First, run the development server:
+En producción: **https://sosvenezuela2026.com**
+
+> Proyecto sin fines de lucro, sin afiliación política. Los datos provienen de carteles públicos y registros comunitarios. Las coordenadas se truncan y los datos sensibles (cédulas, menores, contactos) se enmascaran para proteger a las personas (anti-saqueo / anti-scraping).
+
+## Funcionalidades
+
+- 🗺️ **Mapa en vivo** de sucesos (edificios colapsados/dañados, fugas de gas, vías bloqueadas, personas atrapadas) con SSE.
+- 🔎 **Directorio de personas** público con buscador anti-scraping, fotos y aportes de la comunidad.
+- 📦 **Centros de acopio** geolocalizados.
+- ✅ **Validación** de daños estructurales (vecinos + ingenieros).
+- 🔐 Login con **Google OAuth** + panel de administración.
+- 📊 Estadísticas de tráfico y reportes.
+
+## Stack
+
+- **Next.js 16** (App Router, Turbopack, output standalone) + TypeScript
+- **Tailwind v4**, framer-motion, Leaflet / react-leaflet
+- **PostgreSQL** (Neon) vía `pg`
+- Despliegue en **Docker** detrás de nginx/haproxy
+
+## Desarrollo local
+
+Requisitos: Node.js 22+, una base de datos PostgreSQL.
 
 ```bash
+# 1. Instalar dependencias
+npm install
+
+# 2. Configurar variables de entorno
+cp .env.example .env.local   # y rellena con tus valores
+
+# 3. Levantar el servidor de desarrollo
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Variables de entorno
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Todas las variables están documentadas en [`.env.example`](./.env.example). Los secretos
+(`DATABASE_URL`, `JWT_SECRET`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAIL`) **solo** se leen del
+entorno en el servidor y nunca se exponen al cliente. Únicamente las variables con prefijo
+`NEXT_PUBLIC_` llegan al navegador, y ninguna de ellas contiene información sensible.
 
-## Learn More
+## Scripts de sincronización de datos
 
-To learn more about Next.js, take a look at the following resources:
+En [`scripts/`](./scripts) hay dos procesos opcionales (pensados para correr por cron) que
+alimentan el mapa y el directorio con datos de plataformas ciudadanas:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `sync.cjs` — importa personas (venezuelatebusca, desaparecidosterremotovenezuela,
+  desaparecidosvenezuela), edificios y centros de acopio, con **deduplicación** por
+  `ext_id` y firma de identidad. Requiere `DATABASE_URL` y, para algunas fuentes,
+  `VTB_KEY` / `TVE_KEY` (ver `.env.example`).
+- `newsweep.cjs` — barre Google News, geolocaliza con Ollama local + Nominatim e inserta
+  reportes `unverified`. Requiere `DATABASE_URL` (y Ollama corriendo).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+node scripts/sync.cjs
+node scripts/newsweep.cjs
+```
 
-## Deploy on Vercel
+## Build de producción
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+docker build -t sosvenezuela .
+docker run -d --env-file .env.prod -p 3000:3000 sosvenezuela
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Seguridad
+
+- Ningún secreto se versiona: `.env*` está en `.gitignore` (excepto la plantilla `.env.example`).
+- Si encuentras una vulnerabilidad, por favor repórtala de forma responsable antes de divulgarla.
+
+## Licencia
+
+MIT — ver [LICENSE](./LICENSE).

@@ -1,0 +1,22 @@
+# SOS Venezuela 2026
+
+> Plataforma cívica humanitaria de respuesta al doble terremoto (M7.2 y M7.5) que sacudió Venezuela el 24 de junio de 2026, con epicentro cerca de Morón / San Felipe (estados Carabobo y Yaracuy). Centraliza y cruza información dispersa para ayudar a familias, rescatistas y voluntarios. Sitio sin fines comerciales.
+
+## Qué ofrece
+- **Mapa en vivo** de daños: edificios colapsados y dañados, fugas de gas, vías bloqueadas, refugios y centros de acopio. Datos cruzados de múltiples fuentes ciudadanas y deduplicados, con niveles de verificación (oficial, confirmado por comunidad, sin verificar).
+- **Directorio público de personas** reportadas como desaparecidas o encontradas (decenas de miles de registros agregados de varias plataformas), buscable por nombre.
+- **Validación de daño estructural**: residentes suben fotos de estructuras dañadas e ingenieros/arquitectos validan si son habitables o inhabitables y la magnitud del daño.
+- **Centros de acopio** geolocalizados (qué reciben, dónde).
+- **Primeros auxilios**: 12 guías basadas en Cruz Roja, OMS y FEMA.
+- **Protección de datos**: coordenadas aproximadas (protección anti-saqueo), cédulas enmascaradas, menores protegidos, sin exponer teléfonos de contacto.
+
+## Páginas
+- [Inicio y mapa en vivo](https://sosvenezuela2026.com/)
+- [Buscar persona desaparecida](https://sosvenezuela2026.com/buscar)
+- [Validar daño estructural](https://sosvenezuela2026.com/validar)
+- [Primeros auxilios](https://sosvenezuela2026.com/recomendaciones)
+- [Privacidad y protección de datos](https://sosvenezuela2026.com/privacidad)
+- [Acerca del proyecto](https://sosvenezuela2026.com/acerca)
+
+## Contacto de emergencia
+- Emergencias en Venezuela: 171

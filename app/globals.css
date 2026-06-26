@@ -1,26 +1,175 @@
 @import "tailwindcss";
 
+/* Tailwind v4 auto-detects sources via the git root. This project is NOT a git
+   repo, so utility classes were being purged entirely. Declare sources explicitly. */
+@source "../app/**/*.{js,ts,jsx,tsx,mdx}";
+@source "../components/**/*.{js,ts,jsx,tsx,mdx}";
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #F6F8FB;
+  --surface: #FFFFFF;
+  --surface-2: #FBFCFE;
+  --text-1: #0B1220;
+  --text-2: #475569;
+  --text-3: #94A3B8;
+  --primary: #0D9488;
+  --primary-deep: #0F766E;
+  --primary-light: #CCFBF1;
+  --accent: #0EA5E9;
+  --border: #E6EBF1;
+  --border-soft: #EEF2F7;
+  --danger: #DC2626;
+  --warn: #EA580C;
+  --caution: #EAB308;
+  --safe: #16A34A;
+  --font-display: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --shadow-sm: 0 1px 2px rgba(11,18,32,0.04), 0 1px 3px rgba(11,18,32,0.06);
+  --shadow-md: 0 4px 12px -2px rgba(11,18,32,0.08), 0 2px 6px -2px rgba(11,18,32,0.05);
+  --shadow-lg: 0 18px 40px -12px rgba(11,18,32,0.16), 0 8px 16px -8px rgba(11,18,32,0.08);
+  --shadow-teal: 0 12px 30px -8px rgba(13,148,136,0.35);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* NOTE: do NOT add an un-layered `* { margin:0; padding:0 }` reset here.
+   Tailwind v4 emits all utilities inside @layer, and un-layered rules win over
+   layered ones regardless of specificity — such a reset silently kills every
+   p-*, px-*, m-*, mx-auto utility. Tailwind's preflight already resets margins. */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+html { scroll-behavior: smooth; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text-1);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Premium aurora mesh — pure CSS, zero network/server cost, GPU-cheap.
+     Soft brand-toned light blobs over an almost-white canvas. */
+  background-color: #F7F9FC;
+  background-image:
+    radial-gradient(58rem 42rem at 10% -12%, rgba(13,148,136,0.13), transparent 60%),
+    radial-gradient(52rem 40rem at 102% -4%, rgba(14,165,233,0.12), transparent 58%),
+    radial-gradient(46rem 46rem at 88% 108%, rgba(124,58,237,0.07), transparent 55%),
+    radial-gradient(40rem 38rem at -6% 104%, rgba(245,158,11,0.06), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* Ultra-fine film grain via inline SVG noise — gives a high-end matte texture.
+   Inlined as a data URI: no HTTP request, no asset to serve, ~0.4 KB. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.038;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Faint hairline grid, masked to the top — adds structure without noise. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(11,18,32,0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11,18,32,0.018) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 90% 60% at 50% -4%, #000 25%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 60% at 50% -4%, #000 25%, transparent 78%);
+}
+
+.font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
+
+/* Glassy elevated surface */
+.glass {
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+.leaflet-container {
+  background: #dde4ea;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-body) !important;
+}
+.leaflet-popup-content-wrapper { border-radius: 16px !important; box-shadow: var(--shadow-lg) !important; padding: 4px !important; }
+.leaflet-popup-content { margin: 8px !important; }
+/* Popup entrance animation */
+.leaflet-popup { animation: popup-in 0.32s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: bottom center; }
+@keyframes popup-in {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.92); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Selected-marker ping */
+@keyframes marker-ping {
+  0%   { stroke-width: 2; }
+  35%  { stroke-width: 11; stroke-opacity: 0.45; }
+  100% { stroke-width: 1.5; stroke-opacity: 1; }
+}
+.marker-ping { animation: marker-ping 1.1s ease-out; }
+
+/* ── Animations ─────────────────────────────── */
+@keyframes pulse-ring {
+  0%   { transform: scale(1);   opacity: 0.85; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+@keyframes live-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.55); }
+  50%      { box-shadow: 0 0 0 6px rgba(22,163,74,0); }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+@keyframes sheen {
+  0%   { transform: translateX(-120%) skewX(-18deg); }
+  60%, 100% { transform: translateX(220%) skewX(-18deg); }
+}
+
+@keyframes live-dot-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.55); }
+  50%      { box-shadow: 0 0 0 6px rgba(220,38,38,0); }
+}
+.live-dot { animation: live-dot 1.8s ease-out infinite; }
+.live-dot-red { animation: live-dot-red 1.6s ease-out infinite; }
+.float-slow { animation: float-slow 6s ease-in-out infinite; }
+
+/* Shimmer text for hero accent */
+.shimmer-text {
+  background: linear-gradient(100deg, var(--primary) 20%, #2DD4BF 40%, var(--primary) 60%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 4.5s linear infinite;
+}
+
+/* Card with animated sheen on hover */
+.sheen-card { position: relative; overflow: hidden; }
+.sheen-card::after {
+  content: '';
+  position: absolute; top: 0; left: 0; width: 40%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+  opacity: 0; pointer-events: none;
+}
+.sheen-card:hover::after { opacity: 1; animation: sheen 0.9s ease-out; }
+
+/* Custom slim scrollbar */
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 99px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: #94A3B8; background-clip: content-box; }
+
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
