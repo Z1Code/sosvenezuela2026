@@ -621,18 +621,27 @@ function ReportDetail({ report, authed, onClose }: { report: HazardEvent; authed
   );
 }
 
-/* ── BALANCE DE LA EMERGENCIA (preliminar vs confirmado) ── */
+/* ── BALANCE DE LA EMERGENCIA (en vivo + oficial) ── */
+interface BalanceData {
+  live: { collapsed: number; aftershocks: number | null; maxAfter: number | null; updated_at: string };
+  official: Record<string, { value: string; label: string; updated_at: string }>;
+  official_updated: string | null;
+}
 function BalancePanel() {
+  const [b, setB] = useState<BalanceData | null>(null);
+  useEffect(() => { fetch('/api/balance').then(r => r.json()).then(setB).catch(() => {}); }, []);
+  const o = b?.official || {};
   const prelim = [
-    { label: 'Fallecidos (estimación USGS PAGER)', value: '10.000–100.000' },
-    { label: 'Edificios colapsados (reportes)', value: '15+ La Guaira' },
-    { label: 'Réplicas registradas', value: '~20' },
+    { label: o.fallecidos_estimados?.label || 'Fallecidos (estimación USGS PAGER)', value: o.fallecidos_estimados?.value || '—' },
+    { label: 'Edificios colapsados (reportes)', value: b ? String(b.live.collapsed) : '…' },
+    { label: 'Réplicas (USGS M≥2.5)', value: b?.live?.aftershocks != null ? `${b.live.aftershocks}${b.live.maxAfter ? ` · máx M${b.live.maxAfter.toFixed(1)}` : ''}` : '…' },
   ];
   const conf = [
-    { label: 'Fallecidos confirmados', value: '3 (Caracas)' },
-    { label: 'Estado de emergencia', value: 'Activo' },
-    { label: 'Aeropuerto Maiquetía', value: 'Cerrado' },
+    { label: o.fallecidos_confirmados?.label || 'Fallecidos confirmados', value: o.fallecidos_confirmados?.value || '—' },
+    { label: o.estado_emergencia?.label || 'Estado de emergencia', value: o.estado_emergencia?.value || '—' },
+    { label: o.aeropuerto?.label || 'Aeropuerto Maiquetía', value: o.aeropuerto?.value || '—' },
   ];
+  const oficialFecha = b?.official_updated ? new Date(b.official_updated).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
   const Row = ({ tag, tagColor, tagBg, items }: { tag: string; tagColor: string; tagBg: string; items: { label: string; value: string }[] }) => (
     <div className="flex flex-wrap items-center gap-2.5 py-3">
       <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full flex-shrink-0"
@@ -649,15 +658,16 @@ function BalancePanel() {
     <div className="rounded-3xl p-5" style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
       <div className="flex items-center justify-between mb-1">
         <h2 className="font-display text-base font-bold" style={{ color: 'var(--text-1)' }}>📊 Balance de la emergencia</h2>
-        <span className="text-[10px] font-medium" style={{ color: 'var(--text-3)' }}>actualizado 25-jun-2026</span>
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(13,148,136,0.1)', color: 'var(--primary)' }}>en vivo</span>
       </div>
       <div className="divide-y" style={{ borderColor: 'var(--border-soft)' }}>
         <Row tag="Preliminares" tagColor="#9A3412" tagBg="rgba(234,88,12,0.12)" items={prelim} />
         <Row tag="Confirmadas" tagColor="#15803D" tagBg="rgba(22,163,74,0.12)" items={conf} />
       </div>
       <p className="text-[10px] mt-2 leading-relaxed" style={{ color: 'var(--text-3)' }}>
-        Preliminares = estimaciones/reportes sin confirmación oficial. Confirmadas = fuentes oficiales o medios verificados.
-        Fuentes: USGS, Al Jazeera, CNN, Infobae. Las cifras pueden cambiar conforme avancen las labores de rescate.
+        Edificios colapsados y réplicas se actualizan automáticamente (nuestros reportes · USGS).
+        Cifras confirmadas{oficialFecha ? ` (al ${oficialFecha})` : ''} = fuentes oficiales o medios verificados.
+        Las cifras pueden cambiar conforme avancen las labores de rescate.
       </p>
     </div>
   );

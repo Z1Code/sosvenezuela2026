@@ -18,9 +18,13 @@ const CAT_META: Record<string, { icon: string; label: string }> = {
   blocked_road: { icon: '🚧', label: 'Vía bloqueada' }, flooding: { icon: '🌊', label: 'Inundación' }, medical_need: { icon: '🚑', label: 'Necesidad médica' },
   shelter: { icon: '🏕️', label: 'Refugio' }, water_point: { icon: '💧', label: 'Punto de agua' }, aid_point: { icon: '📦', label: 'Centro de acopio' },
 };
+// Recursos = acopios + refugios + puntos de agua (los datos están en aid_point;
+// shelter/water_point se incluyen por si aparecen). Un solo chip evita el filtro vacío.
+const RESOURCE_CATS = ['aid_point', 'shelter', 'water_point'];
+const ALL_CATS = Object.keys(CAT_META);
 const FILTERS: { v: string; l: string }[] = [
   { v: '', l: 'Todos' }, { v: 'collapsed_building', l: '🏚️ Colapsos' }, { v: 'damaged_building', l: '🏢 Dañados' },
-  { v: 'aid_point', l: '📦 Acopios' }, { v: 'shelter', l: '🏕️ Refugios' }, { v: 'gas_leak', l: '⛽ Gas' },
+  { v: '__recursos__', l: '📦 Acopios y refugios' }, { v: 'gas_leak', l: '⛽ Gas' },
   { v: 'trapped_people', l: '🆘 Atrapados' }, { v: 'blocked_road', l: '🚧 Vías' },
 ];
 
@@ -38,14 +42,19 @@ export default function ReportesPage() {
     return [...reports, ...hazards.filter(h => !ids.has(h.id))];
   }, [reports, hazards]);
 
+  const catShown = useMemo(() => (cat === '__recursos__' ? RESOURCE_CATS : cat ? [cat] : null), [cat]);
+
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     return all.filter(r => {
-      if (cat && r.category !== cat) return false;
+      if (catShown && !catShown.includes(r.category)) return false;
       if (qq && !((r.title || '').toLowerCase().includes(qq) || (r.municipio || '').toLowerCase().includes(qq) || (r.parroquia || '').toLowerCase().includes(qq))) return false;
       return true;
     }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [all, q, cat]);
+  }, [all, q, catShown]);
+
+  // El mapa filtra ocultando todas las categorías que NO están seleccionadas.
+  const hideCats = useMemo(() => (catShown ? ALL_CATS.filter(c => !catShown.includes(c)) : []), [catShown]);
 
   function focus(r: HazardEvent) {
     if (typeof r.lat_pub === 'number') setFly({ id: r.id, lat: r.lat_pub, lng: r.lng_pub, nonce: Date.now() });
@@ -80,7 +89,7 @@ export default function ReportesPage() {
           <div id="mapwrap" className="lg:col-span-3 order-1">
             <div className="rounded-3xl overflow-hidden lg:sticky lg:top-4 h-[55vh] lg:h-[78vh]"
               style={{ position: 'relative', zIndex: 0, isolation: 'isolate', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)' }}>
-              <MapView initialReports={reports} flyTo={fly} onReportClick={focus} />
+              <MapView initialReports={reports} flyTo={fly} onReportClick={focus} hide={hideCats} />
             </div>
           </div>
 

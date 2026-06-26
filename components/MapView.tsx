@@ -36,6 +36,7 @@ const SITE: Record<string, { l: string; c: string }> = {
   B: { l: 'Clase B · roca · amplificación baja', c: '#16A34A' },
 };
 const VS30_TILES = 'https://earthquake.usgs.gov/arcgis/rest/services/eq/vs30_mosaic/MapServer/tile/{z}/{y}/{x}';
+type CatMarker = Leaflet.CircleMarker & { __cat?: string };
 
 function colorFor(r: HazardEvent) {
   if (r.severity && SEV_COLORS[r.severity]) return SEV_COLORS[r.severity];
@@ -141,6 +142,11 @@ export default function MapView({ initialReports, onReportClick, flyTo, hide }: 
     if (!ready || !L || !map) return;
 
     const hideSet = new Set(hide || []);
+    // Quita marcadores cuya categoría quedó oculta al cambiar el filtro (re-añade abajo si vuelve).
+    for (const [id, m] of markersRef.current) {
+      const mc = (m as CatMarker).__cat;
+      if (mc && hideSet.has(mc)) { map.removeLayer(m); markersRef.current.delete(id); }
+    }
     const all = [...initialReports, ...hazards].filter(r => !hideSet.has(r.category));
     for (const r of all) {
       if (markersRef.current.has(r.id)) continue;
@@ -181,6 +187,7 @@ export default function MapView({ initialReports, onReportClick, flyTo, hide }: 
       );
       marker.on('click', () => clickRef.current?.(r));
       marker.addTo(map);
+      (marker as CatMarker).__cat = r.category;
       markersRef.current.set(r.id, marker);
     }
 
@@ -195,7 +202,7 @@ export default function MapView({ initialReports, onReportClick, flyTo, hide }: 
       ];
       if (pts.length) { map.fitBounds(L.latLngBounds(pts), { padding: [42, 42], maxZoom: 11 }); fitted.current = true; }
     }
-  }, [ready, initialReports, hazards]);
+  }, [ready, initialReports, hazards, hide]);
 
   // ── fly to a selected report ───────────────────
   useEffect(() => {
