@@ -18,9 +18,13 @@ Requisitos: Node.js 22+, PostgreSQL.
 
 ```bash
 npm install
-cp .env.example .env.local   # rellena con tus valores
-npm run dev                  # http://localhost:3000
+cp .env.example .env.local                  # rellena con tus valores
+psql "$DATABASE_URL_UNPOOLED" -f schema.sql  # crea tablas, enums y datos demo
+npm run dev                                  # http://localhost:3000
 ```
+
+El esquema vive en [`schema.sql`](./schema.sql) e incluye un admin de ejemplo
+(`admin@terremoto.ve` / `admin123`) **solo para desarrollo**.
 
 Nunca subas `.env.local` ni ningún secreto. El `.gitignore` ya los protege; revisa
 tu diff antes de commitear.

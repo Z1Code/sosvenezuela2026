@@ -33,11 +33,19 @@ npm install
 # 2. Configurar variables de entorno
 cp .env.example .env.local   # y rellena con tus valores
 
-# 3. Levantar el servidor de desarrollo
+# 3. Crear el esquema de la base de datos
+#    (usa la conexión UNPOOLED; crea tablas, enums, triggers y datos demo)
+psql "$DATABASE_URL_UNPOOLED" -f schema.sql
+
+# 4. Levantar el servidor de desarrollo
 npm run dev
 ```
 
 Abre http://localhost:3000.
+
+> El esquema completo está en [`schema.sql`](./schema.sql). Incluye un usuario admin de
+> ejemplo (`admin@terremoto.ve` / `admin123`) **solo para desarrollo local** — cámbialo o
+> elimínalo en cualquier despliegue real.
 
 ### Variables de entorno
 
