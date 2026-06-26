@@ -13,6 +13,30 @@ const SEVS: { v: string; l: string; c: string }[] = [
   { v: 'severo', l: 'Severo', c: '#EA580C' }, { v: 'colapso', l: 'Colapso', c: '#DC2626' },
 ];
 
+// Comprime la imagen en el navegador antes de subirla (reduce payload y almacenamiento).
+function compressImage(file: File, maxDim = 1600, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) { const r = Math.min(maxDim / width, maxDim / height); width = Math.round(width * r); height = Math.round(height * r); }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(reader.result as string); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function ValidarPage() {
   const [role, setRole] = useState<Role>(null);
   return (
@@ -61,15 +85,14 @@ function ResidentUpload() {
   const [err, setErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function onFiles(files: FileList | null) {
+  async function onFiles(files: FileList | null) {
     if (!files) return;
     const slots = 6 - photos.length;
-    Array.from(files).slice(0, slots).forEach(f => {
-      if (!f.type.startsWith('image/')) return;
-      const r = new FileReader();
-      r.onload = () => setPhotos(p => p.length < 6 ? [...p, r.result as string] : p);
-      r.readAsDataURL(f);
-    });
+    for (const f of Array.from(files).slice(0, slots)) {
+      if (!f.type.startsWith('image/')) continue;
+      try { const data = await compressImage(f); setPhotos(p => p.length < 6 ? [...p, data] : p); }
+      catch { /* imagen ilegible, se omite */ }
+    }
   }
   async function submit() {
     if (!photos.length) { setErr('Sube al menos una foto.'); return; }
@@ -138,6 +161,7 @@ function EngineerQueue() {
   const [queue, setQueue] = useState<Sub[] | null>(null);
   const [i, setI] = useState(0);
   const [sev, setSev] = useState('');
+  const [note, setNote] = useState('');
   const [photoIdx, setPhotoIdx] = useState(0);
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-15, 15]);
@@ -149,9 +173,9 @@ function EngineerQueue() {
   const cur = queue && queue[i];
   async function commit(hab: 'habitable' | 'inhabitable' | 'incierto') {
     if (!cur) return;
-    fetch('/api/damage/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submission_id: cur.id, habitabilidad: hab, severidad: sev }) })
+    fetch('/api/damage/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submission_id: cur.id, habitabilidad: hab, severidad: sev, note: note.trim() }) })
       .then(r => { if (r.status === 401) window.location.href = loginUrl; }).catch(() => {});
-    setI(v => v + 1); setSev(''); setPhotoIdx(0); x.set(0);
+    setI(v => v + 1); setSev(''); setNote(''); setPhotoIdx(0); x.set(0);
   }
 
   if (queue === null) return <div className="text-center py-16 text-sm" style={{ color: 'var(--text-3)' }}>Cargando casos…</div>;
@@ -165,7 +189,10 @@ function EngineerQueue() {
 
   return (
     <div>
-      <div className="text-xs mb-3" style={{ color: 'var(--text-3)' }}>Desliza ➡️ habitable · ⬅️ inhabitable · o usa los botones</div>
+      <div className="flex items-center justify-between mb-3 text-xs" style={{ color: 'var(--text-3)' }}>
+        <span>Desliza ➡️ habitable · ⬅️ inhabitable</span>
+        <span className="font-semibold px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-2)' }}>Caso {i + 1} de {queue.length}</span>
+      </div>
       <div className="relative" style={{ height: 460 }}>
         <AnimatePresence>
           <motion.div key={cur.id} drag="x" dragConstraints={{ left: 0, right: 0 }}
@@ -211,6 +238,12 @@ function EngineerQueue() {
             style={{ background: sev === s.v ? s.c : 'var(--surface)', color: sev === s.v ? '#fff' : s.c, border: `1px solid ${s.c}55` }}>{s.l}</button>
         ))}
       </div>
+
+      {/* nota técnica opcional */}
+      <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} maxLength={300}
+        placeholder="Observación técnica (opcional): tipo de grieta, elemento afectado, recomendación…"
+        className="w-full mt-3 rounded-xl px-3 py-2.5 text-sm outline-none resize-none"
+        style={{ border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-1)' }} />
 
       {/* acciones */}
       <div className="flex items-center justify-center gap-4 mt-4">
