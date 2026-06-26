@@ -1,185 +1,158 @@
--- ============================================================
--- TERREMOTO VE — Schema Neon Postgres
--- Ejecutar CON conexión UNPOOLED (DATABASE_URL_UNPOOLED)
--- ============================================================
+--
+-- PostgreSQL database dump
+--
 
--- 1. ENUMS
-create type severity        as enum ('verde','amarillo','naranja','rojo');
-create type report_category as enum (
-  'collapsed_building','damaged_building','trapped_people','fire','gas_leak',
-  'blocked_road','flooding','medical_need',
-  'shelter','water_point','aid_point');
-create type resource_status as enum ('open','full','closed');
-create type verification    as enum ('unverified','community_confirmed','official_verified','resolved','false_report');
-create type person_status   as enum (
-  'seeking_info','self_safe','found_alive','injured','hospitalized','sheltered','deceased','unknown');
-create type cedula_type     as enum ('V','E');
-create type user_role       as enum ('citizen','responder','admin');
-create type triage_inside   as enum ('si','no','desconocido');
-create type triage_occupancy as enum ('ocupado','vacante','desconocido');
-create type building_type   as enum ('casa','apartamento','hospital','escuela','otro');
+\restrict Qo9Vnrtnbt1IBtcZlqzlLxzAZFVpKRf8mP3wKaFrwF156WkJV6dhlZAGwc56MGN
 
--- 2. USERS
-create table users (
-  id            uuid primary key default gen_random_uuid(),
-  email         text not null unique,
-  password_hash text not null,
-  full_name     text,
-  phone         text,
-  role          user_role not null default 'citizen',
-  created_at    timestamptz not null default now()
-);
-create index on users (email);
+-- Dumped from database version 18.4 (eaf151e)
+-- Dumped by pg_dump version 18.4 (Debian 18.4-1.pgdg13+1)
 
--- Seed admin user (password: admin123 - CAMBIAR INMEDIATAMENTE)
-insert into users (id, email, password_hash, full_name, role) values (
-  'a0000000-0000-0000-0000-000000000001',
-  'admin@terremoto.ve',
-  '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LkZkSGxUXJG', -- bcrypt of "admin123"
-  'Administrador',
-  'admin'
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Name: building_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.building_type AS ENUM (
+    'casa',
+    'apartamento',
+    'hospital',
+    'escuela',
+    'otro'
 );
 
--- 3. HAZARD REPORTS (public, jittered coords)
-create table hazard_reports (
-  id          uuid primary key default gen_random_uuid(),
-  category    report_category not null,
-  severity    severity,
-  resource_status resource_status,
-  verification verification not null default 'unverified',
-  title       text,
-  description text,
-  lat_pub     double precision not null,
-  lng_pub     double precision not null,
-  parroquia   text,
-  municipio   text,
-  people_trapped_count   int,
-  people_trapped_unknown boolean not null default false,
-  anyone_inside triage_inside,
-  occupancy   triage_occupancy,
-  building_type building_type,
-  confirms    int not null default 0,
-  disputes    int not null default 0,
-  reporter_id uuid not null references users(id),
-  flagged_count int not null default 0,
-  source_url  text,
-  deleted_at  timestamptz,
-  created_at  timestamptz not null default now()
-);
-create index on hazard_reports (created_at);
 
--- 4. INCIDENT PRECISE (precise coords - staff only)
-create table incident_precise (
-  report_id uuid primary key references hazard_reports(id) on delete cascade,
-  lat double precision not null,
-  lng double precision not null,
-  created_at timestamptz not null default now()
+--
+-- Name: cedula_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.cedula_type AS ENUM (
+    'V',
+    'E'
 );
 
--- 5. PERSON REPORTS
-create table person_reports (
-  id           uuid primary key default gen_random_uuid(),
-  status       person_status not null,
-  cedula       text,
-  cedula_norm  text,
-  cedula_type  cedula_type,
-  given_name   text,
-  family_name  text,
-  full_name    text not null,
-  is_minor     boolean not null default false,
-  sex          text,
-  age_min      int,
-  age_max      int,
-  phone        text,
-  phone_norm   text,
-  municipio    text,
-  parroquia    text,
-  hospital_name text,
-  note_text    text,
-  is_self_report boolean not null default false,
-  photo_path   text,
-  reporter_id  uuid not null references users(id),
-  reporter_contact text,
-  flagged_count int not null default 0,
-  deleted_at   timestamptz,
-  source_date  timestamptz not null default now(),
-  created_at   timestamptz not null default now(),
-  expiry_date  timestamptz not null default (now() + interval '90 days')
+
+--
+-- Name: person_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.person_status AS ENUM (
+    'seeking_info',
+    'self_safe',
+    'found_alive',
+    'injured',
+    'hospitalized',
+    'sheltered',
+    'deceased',
+    'unknown'
 );
-create index on person_reports (cedula_norm);
-create index on person_reports (phone_norm);
 
-create or replace function prep_person_report() returns trigger
-  language plpgsql as $$
-begin
-  new.cedula_norm := nullif(upper(regexp_replace(coalesce(new.cedula,''), '[^0-9A-Za-z]', '', 'g')), '');
-  new.phone_norm  := nullif(regexp_replace(coalesce(new.phone,''), '[^0-9+]', '', 'g'), '');
-  return new;
-end $$;
-create trigger trg_prep_person before insert on person_reports
-  for each row execute function prep_person_report();
 
-create view person_public as
-select
-  id, status,
-  case when cedula_norm is not null
-       then coalesce(cedula_type::text,'') || '-****' || right(cedula_norm, 3)
-       else null end as cedula_masked,
-  case when is_minor then 'Menor reportado'
-       else trim(coalesce(given_name,'') || ' ' ||
-                 case when family_name is not null then left(family_name,1) || '.' else '' end)
-  end as display_name,
-  municipio, parroquia, hospital_name, source_date, photo_path
-from person_reports
-where deleted_at is null and status <> 'deceased';
+--
+-- Name: report_category; Type: TYPE; Schema: public; Owner: -
+--
 
--- 6. WATCH SUBSCRIPTIONS
-create table watch_subscriptions (
-  id          uuid primary key default gen_random_uuid(),
-  watcher_id  uuid not null references users(id),
-  cedula_norm text not null,
-  label       text,
-  created_at  timestamptz not null default now()
+CREATE TYPE public.report_category AS ENUM (
+    'collapsed_building',
+    'damaged_building',
+    'trapped_people',
+    'fire',
+    'gas_leak',
+    'blocked_road',
+    'flooding',
+    'medical_need',
+    'shelter',
+    'water_point',
+    'aid_point'
 );
-create index on watch_subscriptions (cedula_norm);
 
--- 7. NOTIFICATIONS + match trigger
-create table notifications (
-  id               uuid primary key default gen_random_uuid(),
-  watcher_id       uuid not null references users(id),
-  person_report_id uuid not null references person_reports(id),
-  cedula_norm      text not null,
-  status           person_status not null,
-  read_at          timestamptz,
-  created_at       timestamptz not null default now()
+
+--
+-- Name: resource_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.resource_status AS ENUM (
+    'open',
+    'full',
+    'closed'
 );
-create index on notifications (watcher_id, created_at);
 
-create or replace function match_watch() returns trigger
-  language plpgsql as $$
-begin
-  if new.cedula_norm is not null then
-    insert into notifications (watcher_id, person_report_id, cedula_norm, status)
-    select w.watcher_id, new.id, new.cedula_norm, new.status
-    from watch_subscriptions w
-    where w.cedula_norm = new.cedula_norm;
-    perform pg_notify('match', new.cedula_norm);
-  end if;
-  return new;
-end $$;
-create trigger trg_match after insert on person_reports
-  for each row execute function match_watch();
 
--- 8. CREATE HAZARD REPORT FUNCTION (server-side jitter)
-create or replace function create_hazard_report(
-  p_reporter_id uuid,
-  p_category report_category, p_severity severity, p_resource_status resource_status,
-  p_title text, p_description text,
-  p_lat double precision, p_lng double precision,
-  p_parroquia text, p_municipio text,
-  p_trapped int, p_trapped_unknown boolean,
-  p_inside triage_inside, p_occupancy triage_occupancy, p_building building_type
-) returns uuid language plpgsql as $$
+--
+-- Name: severity; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.severity AS ENUM (
+    'verde',
+    'amarillo',
+    'naranja',
+    'rojo'
+);
+
+
+--
+-- Name: triage_inside; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.triage_inside AS ENUM (
+    'si',
+    'no',
+    'desconocido'
+);
+
+
+--
+-- Name: triage_occupancy; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.triage_occupancy AS ENUM (
+    'ocupado',
+    'vacante',
+    'desconocido'
+);
+
+
+--
+-- Name: user_role; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.user_role AS ENUM (
+    'citizen',
+    'responder',
+    'admin'
+);
+
+
+--
+-- Name: verification; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.verification AS ENUM (
+    'unverified',
+    'community_confirmed',
+    'official_verified',
+    'resolved',
+    'false_report'
+);
+
+
+--
+-- Name: create_hazard_report(uuid, public.report_category, public.severity, public.resource_status, text, text, double precision, double precision, text, text, integer, boolean, public.triage_inside, public.triage_occupancy, public.building_type); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.create_hazard_report(p_reporter_id uuid, p_category public.report_category, p_severity public.severity, p_resource_status public.resource_status, p_title text, p_description text, p_lat double precision, p_lng double precision, p_parroquia text, p_municipio text, p_trapped integer, p_trapped_unknown boolean, p_inside public.triage_inside, p_occupancy public.triage_occupancy, p_building public.building_type) RETURNS uuid
+    LANGUAGE plpgsql
+    AS $$
 declare
   v_id uuid; d double precision; b double precision; dlat double precision; dlng double precision;
 begin
@@ -203,9 +176,115 @@ begin
   return v_id;
 end $$;
 
--- 9. SEARCH PERSON FUNCTION
-create or replace function search_person(p_cedula text, p_phone text, p_name text)
-  returns setof person_public language plpgsql as $$
+
+--
+-- Name: match_watch(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.match_watch() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  if new.cedula_norm is not null then
+    insert into notifications (watcher_id, person_report_id, cedula_norm, status)
+    select w.watcher_id, new.id, new.cedula_norm, new.status
+    from watch_subscriptions w
+    where w.cedula_norm = new.cedula_norm;
+    perform pg_notify('match', new.cedula_norm);
+  end if;
+  return new;
+end $$;
+
+
+--
+-- Name: prep_person_report(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prep_person_report() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  new.cedula_norm := nullif(upper(regexp_replace(coalesce(new.cedula,''), '[^0-9A-Za-z]', '', 'g')), '');
+  new.phone_norm  := nullif(regexp_replace(coalesce(new.phone,''), '[^0-9+]', '', 'g'), '');
+  return new;
+end $$;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: person_reports; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.person_reports (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    status public.person_status NOT NULL,
+    cedula text,
+    cedula_norm text,
+    cedula_type public.cedula_type,
+    given_name text,
+    family_name text,
+    full_name text NOT NULL,
+    is_minor boolean DEFAULT false NOT NULL,
+    sex text,
+    age_min integer,
+    age_max integer,
+    phone text,
+    phone_norm text,
+    municipio text,
+    parroquia text,
+    hospital_name text,
+    note_text text,
+    is_self_report boolean DEFAULT false NOT NULL,
+    photo_path text,
+    reporter_id uuid NOT NULL,
+    reporter_contact text,
+    flagged_count integer DEFAULT 0 NOT NULL,
+    deleted_at timestamp with time zone,
+    source_date timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expiry_date timestamp with time zone DEFAULT (now() + '90 days'::interval) NOT NULL,
+    ext_id text
+);
+
+
+--
+-- Name: person_public; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.person_public AS
+ SELECT id,
+    status,
+        CASE
+            WHEN (cedula_norm IS NOT NULL) THEN ((COALESCE((cedula_type)::text, ''::text) || '-****'::text) || "right"(cedula_norm, 3))
+            ELSE NULL::text
+        END AS cedula_masked,
+        CASE
+            WHEN is_minor THEN 'Menor reportado'::text
+            ELSE TRIM(BOTH FROM ((COALESCE(given_name, ''::text) || ' '::text) ||
+            CASE
+                WHEN (family_name IS NOT NULL) THEN ("left"(family_name, 1) || '.'::text)
+                ELSE ''::text
+            END))
+        END AS display_name,
+    municipio,
+    parroquia,
+    hospital_name,
+    source_date,
+    photo_path
+   FROM public.person_reports
+  WHERE ((deleted_at IS NULL) AND (status <> 'deceased'::public.person_status));
+
+
+--
+-- Name: search_person(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.search_person(p_cedula text, p_phone text, p_name text) RETURNS SETOF public.person_public
+    LANGUAGE plpgsql
+    AS $$
 declare c text; ph text;
 begin
   c  := nullif(upper(regexp_replace(coalesce(p_cedula,''), '[^0-9A-Za-z]', '', 'g')), '');
@@ -225,189 +304,801 @@ begin
   end if;
 end $$;
 
--- 10. CHAT MESSAGES
-create table chat_messages (
-  id         uuid primary key default gen_random_uuid(),
-  channel    text not null default 'ops',
-  estado     text,
-  body       text not null,
-  user_id    uuid not null references users(id),
-  created_at timestamptz not null default now()
-);
-create index on chat_messages (channel, created_at);
 
--- 11. COMMUNITY INTERACTIONS
-create table safe_checkin (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id),
-  estado text,
-  msg    text,
-  created_at timestamptz not null default now()
-);
-create index on safe_checkin (created_at);
+--
+-- Name: chat_messages; Type: TABLE; Schema: public; Owner: -
+--
 
-create table report_comment (
-  id uuid primary key default gen_random_uuid(),
-  report_id uuid not null references hazard_reports(id) on delete cascade,
-  user_id uuid not null references users(id),
-  body text not null,
-  hidden boolean not null default false,
-  flagged_count int not null default 0,
-  created_at timestamptz not null default now()
-);
-create index on report_comment (report_id, created_at);
-
-create table report_reaction (
-  report_id uuid not null references hazard_reports(id) on delete cascade,
-  user_id uuid not null references users(id),
-  kind text not null check (kind in ('confirmo','sigue','resuelto','disputo')),
-  created_at timestamptz not null default now(),
-  primary key (report_id, user_id, kind)
+CREATE TABLE public.chat_messages (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    channel text DEFAULT 'ops'::text NOT NULL,
+    estado text,
+    body text NOT NULL,
+    user_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
--- 12. MODERATION LOG
-create table moderacion_intentos (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references users(id),
-  canal text,
-  contenido_raw text,
-  categorias text[],
-  created_at timestamptz not null default now()
-);
-create index on moderacion_intentos (user_id, created_at);
 
--- 13. TWEETS (curated by admin; posted_at derived from snowflake id)
-create table tweets (
-  id         uuid primary key default gen_random_uuid(),
-  tweet_id   text not null unique,
-  url        text not null,
-  posted_at  timestamptz not null,
-  added_by   uuid references users(id),
-  created_at timestamptz not null default now()
+--
+-- Name: damage_submissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.damage_submissions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    zona text,
+    municipio text,
+    building_type text,
+    note text,
+    photo_ids text[] DEFAULT '{}'::text[] NOT NULL,
+    submitter_id uuid,
+    habitable_votes integer DEFAULT 0 NOT NULL,
+    inhabitable_votes integer DEFAULT 0 NOT NULL,
+    uncertain_votes integer DEFAULT 0 NOT NULL,
+    validations integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
-create index on tweets (posted_at desc);
+
+
+--
+-- Name: damage_validations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.damage_validations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    submission_id uuid NOT NULL,
+    validator_id uuid,
+    habitabilidad text NOT NULL,
+    severidad text,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT damage_validations_habitabilidad_check CHECK ((habitabilidad = ANY (ARRAY['habitable'::text, 'inhabitable'::text, 'incierto'::text]))),
+    CONSTRAINT damage_validations_severidad_check CHECK ((severidad = ANY (ARRAY['leve'::text, 'moderado'::text, 'severo'::text, 'colapso'::text])))
+);
+
+
+--
+-- Name: emergency_status; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.emergency_status (
+    key text NOT NULL,
+    value text NOT NULL,
+    label text,
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: hazard_reports; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.hazard_reports (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    category public.report_category NOT NULL,
+    severity public.severity,
+    resource_status public.resource_status,
+    verification public.verification DEFAULT 'unverified'::public.verification NOT NULL,
+    title text,
+    description text,
+    lat_pub double precision NOT NULL,
+    lng_pub double precision NOT NULL,
+    parroquia text,
+    municipio text,
+    people_trapped_count integer,
+    people_trapped_unknown boolean DEFAULT false NOT NULL,
+    anyone_inside public.triage_inside,
+    occupancy public.triage_occupancy,
+    building_type public.building_type,
+    confirms integer DEFAULT 0 NOT NULL,
+    disputes integer DEFAULT 0 NOT NULL,
+    reporter_id uuid NOT NULL,
+    flagged_count integer DEFAULT 0 NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    source_url text,
+    image_url text,
+    site_vs30 integer,
+    site_class text,
+    ext_id text
+);
+
+
+--
+-- Name: incident_precise; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.incident_precise (
+    report_id uuid NOT NULL,
+    lat double precision NOT NULL,
+    lng double precision NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: moderacion_intentos; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.moderacion_intentos (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid,
+    canal text,
+    contenido_raw text,
+    categorias text[],
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: news_articles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.news_articles (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    title text NOT NULL,
+    url text NOT NULL,
+    source text,
+    summary text,
+    image_url text,
+    published_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: news_seen; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.news_seen (
+    url text NOT NULL,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.notifications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    watcher_id uuid NOT NULL,
+    person_report_id uuid NOT NULL,
+    cedula_norm text NOT NULL,
+    status public.person_status NOT NULL,
+    read_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: page_views; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.page_views (
+    id bigint NOT NULL,
+    path text NOT NULL,
+    visitor text,
+    referrer text,
+    device text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: page_views_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.page_views_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: page_views_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.page_views_id_seq OWNED BY public.page_views.id;
+
+
+--
+-- Name: person_tips; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.person_tips (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    person_report_id uuid NOT NULL,
+    body text NOT NULL,
+    contact text,
+    user_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: report_comment; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.report_comment (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    report_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    body text NOT NULL,
+    hidden boolean DEFAULT false NOT NULL,
+    flagged_count integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: report_reaction; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.report_reaction (
+    report_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT report_reaction_kind_check CHECK ((kind = ANY (ARRAY['confirmo'::text, 'sigue'::text, 'resuelto'::text, 'disputo'::text])))
+);
+
+
+--
+-- Name: safe_checkin; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.safe_checkin (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    estado text,
+    msg text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: tweets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tweets (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tweet_id text NOT NULL,
+    url text NOT NULL,
+    posted_at timestamp with time zone NOT NULL,
+    added_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.users (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    email text NOT NULL,
+    password_hash text NOT NULL,
+    full_name text,
+    phone text,
+    role public.user_role DEFAULT 'citizen'::public.user_role NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: watch_subscriptions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.watch_subscriptions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    watcher_id uuid NOT NULL,
+    cedula_norm text NOT NULL,
+    label text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: page_views id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.page_views ALTER COLUMN id SET DEFAULT nextval('public.page_views_id_seq'::regclass);
+
+
+--
+-- Name: chat_messages chat_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chat_messages
+    ADD CONSTRAINT chat_messages_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: damage_submissions damage_submissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.damage_submissions
+    ADD CONSTRAINT damage_submissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: damage_validations damage_validations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.damage_validations
+    ADD CONSTRAINT damage_validations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: damage_validations damage_validations_submission_id_validator_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.damage_validations
+    ADD CONSTRAINT damage_validations_submission_id_validator_id_key UNIQUE (submission_id, validator_id);
+
+
+--
+-- Name: emergency_status emergency_status_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.emergency_status
+    ADD CONSTRAINT emergency_status_pkey PRIMARY KEY (key);
+
+
+--
+-- Name: hazard_reports hazard_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hazard_reports
+    ADD CONSTRAINT hazard_reports_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: incident_precise incident_precise_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.incident_precise
+    ADD CONSTRAINT incident_precise_pkey PRIMARY KEY (report_id);
+
+
+--
+-- Name: moderacion_intentos moderacion_intentos_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.moderacion_intentos
+    ADD CONSTRAINT moderacion_intentos_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: news_articles news_articles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.news_articles
+    ADD CONSTRAINT news_articles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: news_articles news_articles_url_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.news_articles
+    ADD CONSTRAINT news_articles_url_key UNIQUE (url);
+
+
+--
+-- Name: news_seen news_seen_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.news_seen
+    ADD CONSTRAINT news_seen_pkey PRIMARY KEY (url);
+
+
+--
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: page_views page_views_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.page_views
+    ADD CONSTRAINT page_views_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: person_reports person_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.person_reports
+    ADD CONSTRAINT person_reports_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: person_tips person_tips_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.person_tips
+    ADD CONSTRAINT person_tips_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: report_comment report_comment_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_comment
+    ADD CONSTRAINT report_comment_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: report_reaction report_reaction_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_reaction
+    ADD CONSTRAINT report_reaction_pkey PRIMARY KEY (report_id, user_id, kind);
+
+
+--
+-- Name: safe_checkin safe_checkin_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.safe_checkin
+    ADD CONSTRAINT safe_checkin_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: tweets tweets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tweets
+    ADD CONSTRAINT tweets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: tweets tweets_tweet_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tweets
+    ADD CONSTRAINT tweets_tweet_id_key UNIQUE (tweet_id);
+
+
+--
+-- Name: users users_email_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_email_key UNIQUE (email);
+
+
+--
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: watch_subscriptions watch_subscriptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.watch_subscriptions
+    ADD CONSTRAINT watch_subscriptions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: chat_messages_channel_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX chat_messages_channel_created_at_idx ON public.chat_messages USING btree (channel, created_at);
+
+
+--
+-- Name: ds_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ds_created ON public.damage_submissions USING btree (validations, created_at DESC);
+
+
+--
+-- Name: hazard_reports_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX hazard_reports_created_at_idx ON public.hazard_reports USING btree (created_at);
+
+
+--
+-- Name: idx_news_published; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_news_published ON public.news_articles USING btree (published_at DESC NULLS LAST);
+
+
+--
+-- Name: moderacion_intentos_user_id_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX moderacion_intentos_user_id_created_at_idx ON public.moderacion_intentos USING btree (user_id, created_at);
+
+
+--
+-- Name: notifications_watcher_id_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX notifications_watcher_id_created_at_idx ON public.notifications USING btree (watcher_id, created_at);
+
+
+--
+-- Name: person_reports_cedula_norm_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX person_reports_cedula_norm_idx ON public.person_reports USING btree (cedula_norm);
+
+
+--
+-- Name: person_reports_phone_norm_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX person_reports_phone_norm_idx ON public.person_reports USING btree (phone_norm);
+
+
+--
+-- Name: person_tips_pid; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX person_tips_pid ON public.person_tips USING btree (person_report_id, created_at);
+
+
+--
+-- Name: pr_ext_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX pr_ext_id ON public.person_reports USING btree (ext_id);
+
+
+--
+-- Name: pv_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pv_created ON public.page_views USING btree (created_at);
+
+
+--
+-- Name: pv_visitor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pv_visitor ON public.page_views USING btree (visitor);
+
+
+--
+-- Name: report_comment_report_id_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX report_comment_report_id_created_at_idx ON public.report_comment USING btree (report_id, created_at);
+
+
+--
+-- Name: safe_checkin_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX safe_checkin_created_at_idx ON public.safe_checkin USING btree (created_at);
+
+
+--
+-- Name: tweets_posted_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX tweets_posted_idx ON public.tweets USING btree (posted_at DESC);
+
+
+--
+-- Name: users_email_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX users_email_idx ON public.users USING btree (email);
+
+
+--
+-- Name: ux_hazard_ext; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ux_hazard_ext ON public.hazard_reports USING btree (ext_id);
+
+
+--
+-- Name: watch_subscriptions_cedula_norm_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX watch_subscriptions_cedula_norm_idx ON public.watch_subscriptions USING btree (cedula_norm);
+
+
+--
+-- Name: person_reports trg_match; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_match AFTER INSERT ON public.person_reports FOR EACH ROW EXECUTE FUNCTION public.match_watch();
+
+
+--
+-- Name: person_reports trg_prep_person; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_prep_person BEFORE INSERT ON public.person_reports FOR EACH ROW EXECUTE FUNCTION public.prep_person_report();
+
+
+--
+-- Name: chat_messages chat_messages_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chat_messages
+    ADD CONSTRAINT chat_messages_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: damage_submissions damage_submissions_submitter_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.damage_submissions
+    ADD CONSTRAINT damage_submissions_submitter_id_fkey FOREIGN KEY (submitter_id) REFERENCES public.users(id);
+
+
+--
+-- Name: damage_validations damage_validations_submission_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.damage_validations
+    ADD CONSTRAINT damage_validations_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.damage_submissions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: damage_validations damage_validations_validator_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.damage_validations
+    ADD CONSTRAINT damage_validations_validator_id_fkey FOREIGN KEY (validator_id) REFERENCES public.users(id);
+
+
+--
+-- Name: hazard_reports hazard_reports_reporter_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hazard_reports
+    ADD CONSTRAINT hazard_reports_reporter_id_fkey FOREIGN KEY (reporter_id) REFERENCES public.users(id);
+
+
+--
+-- Name: incident_precise incident_precise_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.incident_precise
+    ADD CONSTRAINT incident_precise_report_id_fkey FOREIGN KEY (report_id) REFERENCES public.hazard_reports(id) ON DELETE CASCADE;
+
+
+--
+-- Name: moderacion_intentos moderacion_intentos_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.moderacion_intentos
+    ADD CONSTRAINT moderacion_intentos_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: notifications notifications_person_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_person_report_id_fkey FOREIGN KEY (person_report_id) REFERENCES public.person_reports(id);
+
+
+--
+-- Name: notifications notifications_watcher_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_watcher_id_fkey FOREIGN KEY (watcher_id) REFERENCES public.users(id);
+
+
+--
+-- Name: person_reports person_reports_reporter_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.person_reports
+    ADD CONSTRAINT person_reports_reporter_id_fkey FOREIGN KEY (reporter_id) REFERENCES public.users(id);
+
+
+--
+-- Name: person_tips person_tips_person_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.person_tips
+    ADD CONSTRAINT person_tips_person_report_id_fkey FOREIGN KEY (person_report_id) REFERENCES public.person_reports(id) ON DELETE CASCADE;
+
+
+--
+-- Name: person_tips person_tips_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.person_tips
+    ADD CONSTRAINT person_tips_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: report_comment report_comment_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_comment
+    ADD CONSTRAINT report_comment_report_id_fkey FOREIGN KEY (report_id) REFERENCES public.hazard_reports(id) ON DELETE CASCADE;
+
+
+--
+-- Name: report_comment report_comment_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_comment
+    ADD CONSTRAINT report_comment_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: report_reaction report_reaction_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_reaction
+    ADD CONSTRAINT report_reaction_report_id_fkey FOREIGN KEY (report_id) REFERENCES public.hazard_reports(id) ON DELETE CASCADE;
+
+
+--
+-- Name: report_reaction report_reaction_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_reaction
+    ADD CONSTRAINT report_reaction_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: safe_checkin safe_checkin_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.safe_checkin
+    ADD CONSTRAINT safe_checkin_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: tweets tweets_added_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tweets
+    ADD CONSTRAINT tweets_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.users(id);
+
+
+--
+-- Name: watch_subscriptions watch_subscriptions_watcher_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.watch_subscriptions
+    ADD CONSTRAINT watch_subscriptions_watcher_id_fkey FOREIGN KEY (watcher_id) REFERENCES public.users(id);
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict Qo9Vnrtnbt1IBtcZlqzlLxzAZFVpKRf8mP3wKaFrwF156WkJV6dhlZAGwc56MGN
+
 
 -- ============================================================
--- SEED DATA: Hotel Eduard's en La Guaira (confirmed/collapsed)
+-- Seed mínimo para DESARROLLO LOCAL (no forma parte de producción).
+-- Usuario admin de ejemplo para poder entrar a /admin en local.
+-- password: "admin123"  → CÁMBIALO o elimínalo en cualquier despliegue real.
 -- ============================================================
-insert into hazard_reports (
-  id, category, severity, verification, title, description,
-  lat_pub, lng_pub, parroquia, municipio, building_type,
-  reporter_id, created_at
-) values (
-  'b1111111-1111-1111-1111-111111111101',
-  'collapsed_building',
-  'rojo',
-  'official_verified',
-  'Hotel Eduard''s — Colapso total',
-  'El Hotel Eduard''s en La Guaira sufrió colapso estructural total tras el sismo principal M7.5. Confirmado por equipos de Protección Civil. Área acordonada. Se reportan personas atrapadas. NO ingresar al edificio ni zonas aledañas.',
-  10.601,
-  -66.932,
-  'La Guaira',
-  'Vargas',
-  'otro',
+INSERT INTO public.users (id, email, password_hash, full_name, role) VALUES (
   'a0000000-0000-0000-0000-000000000001',
-  now() - interval '2 hours'
-);
-
-insert into incident_precise (report_id, lat, lng) values (
-  'b1111111-1111-1111-1111-111111111101',
-  10.6012,
-  -66.9318
-);
-
--- Seed a few more representative reports across Venezuela for demo
-insert into hazard_reports (
-  id, category, severity, verification, title, description,
-  lat_pub, lng_pub, municipio, reporter_id, created_at
-) values
-(
-  'b1111111-1111-1111-1111-111111111102',
-  'damaged_building', 'naranja', 'community_confirmed',
-  'Edificio residencial con daño severo',
-  'Fachada agrietada y piso inclinado. Familias evacuadas por las autoridades.',
-  10.168, -68.001, 'Valencia',
-  'a0000000-0000-0000-0000-000000000001',
-  now() - interval '90 minutes'
-),
-(
-  'b1111111-1111-1111-1111-111111111103',
-  'shelter', null, 'official_verified',
-  'Centro de acopio — Escuela Básica Morón',
-  'Habilitado como refugio temporal. Capacidad: 200 personas. Hay agua y colchonetas.',
-  10.476, -68.196, 'Morón',
-  'a0000000-0000-0000-0000-000000000001',
-  now() - interval '75 minutes'
-),
-(
-  'b1111111-1111-1111-1111-111111111104',
-  'trapped_people', 'rojo', 'community_confirmed',
-  'Personas atrapadas — Edificio céntrico',
-  'Se escuchan voces bajo los escombros. Solicitar equipo de rescate urgente.',
-  10.172, -67.995, 'Valencia',
-  'a0000000-0000-0000-0000-000000000001',
-  now() - interval '60 minutes'
-),
-(
-  'b1111111-1111-1111-1111-111111111105',
-  'water_point', null, 'official_verified',
-  'Punto de agua potable — Cruz Roja Venezolana',
-  'Distribución de agua en camiones cisterna. Lleva recipientes.',
-  10.160, -68.010, 'Valencia',
-  'a0000000-0000-0000-0000-000000000001',
-  now() - interval '45 minutes'
-);
-
--- Add precise coords for the other seed reports (approximate)
-insert into incident_precise (report_id, lat, lng) values
-('b1111111-1111-1111-1111-111111111102', 10.1688, -68.0016),
-('b1111111-1111-1111-1111-111111111103', 10.4768, -68.1966),
-('b1111111-1111-1111-1111-111111111104', 10.1728, -67.9956),
-('b1111111-1111-1111-1111-111111111105', 10.1608, -68.0106);
-
--- ============================================================
--- SEED: Daños reportados por prensa (24-jun-2026). Marcados como
--- community_confirmed con fuente citada — NO confirmados en sitio.
--- Fuentes: El Colombiano, Diario de Morelos, N+, BluRadio, TheObjective.
--- ============================================================
-insert into hazard_reports (id, category, severity, verification, title, description, lat_pub, lng_pub, parroquia, municipio, building_type, reporter_id, created_at) values
-('b2222222-2222-2222-2222-222222222201','damaged_building','naranja','community_confirmed',
- 'Colapso parcial en edificio alto — San Bernardino',
- 'Reporte de prensa (El Colombiano, 24-jun-2026 ~22:05 VET): colapso parcial de estructura en edificio alto del sector San Bernardino, Caracas. Pendiente verificación oficial en sitio. No ingresar a estructuras dañadas.',
- 10.512, -66.902, 'San Bernardino', 'Caracas', 'apartamento', 'a0000000-0000-0000-0000-000000000001', now() - interval '90 minutes'),
-('b2222222-2222-2222-2222-222222222202','damaged_building','amarillo','community_confirmed',
- 'Fachadas y escaleras dañadas — Altamira',
- 'Reporte de prensa (El Colombiano): fachadas destruidas, grietas en paredes y escaleras desprendidas en edificaciones de Altamira, Chacao (Caracas). Pendiente verificación oficial.',
- 10.497, -66.853, 'Altamira', 'Chacao', 'apartamento', 'a0000000-0000-0000-0000-000000000001', now() - interval '70 minutes'),
-('b2222222-2222-2222-2222-222222222203','damaged_building','naranja','community_confirmed',
- 'Aeropuerto Simón Bolívar (Maiquetía) — daños y vuelos desviados',
- 'Reporte de prensa (Diario de Morelos / N+): el Aeropuerto Internacional Simón Bolívar de Maiquetía sufrió afectaciones; vuelos desviados a aeropuertos alternos. Pendiente parte oficial de las autoridades aeronáuticas.',
- 10.601, -66.991, 'Maiquetía', 'La Guaira', 'otro', 'a0000000-0000-0000-0000-000000000001', now() - interval '80 minutes'),
-('b2222222-2222-2222-2222-222222222204','gas_leak','naranja','official_verified',
- 'Corte preventivo de gas directo a edificios',
- 'Anuncio oficial (Min. Diosdado Cabello, 24-jun-2026): se ordenó el corte del servicio de gas directo a edificios ante posibles fugas y riesgo de explosión tras el sismo. No enciendas fuego ni equipos eléctricos si hueles gas.',
- 10.506, -66.914, 'Libertador', 'Caracas', 'otro', 'a0000000-0000-0000-0000-000000000001', now() - interval '60 minutes');
-
-insert into incident_precise (report_id, lat, lng) values
-('b2222222-2222-2222-2222-222222222201', 10.5127, -66.9025),
-('b2222222-2222-2222-2222-222222222202', 10.4977, -66.8535),
-('b2222222-2222-2222-2222-222222222203', 10.6017, -66.9915),
-('b2222222-2222-2222-2222-222222222204', 10.5067, -66.9145);
-
-update hazard_reports set source_url = 'https://www.elcolombiano.com/internacional/temblor-hoy-caracas-venezuela-sismo-bogota-evacuacion-KP38155708'
-  where id in ('b2222222-2222-2222-2222-222222222201','b2222222-2222-2222-2222-222222222202');
-update hazard_reports set source_url = 'https://www.diariodemorelos.com/noticias/terremoto-magnitud-71-sacude-venezuela-este-miercoles-24-junio-2026-epicentro-cerca-moron-carabobo-danos-en-caracas-alerta-tsunami-cancelada'
-  where id in ('b2222222-2222-2222-2222-222222222203','b2222222-2222-2222-2222-222222222204');
-
--- Reactions on the Eduard's report
-insert into report_reaction (report_id, user_id, kind) values
-('b1111111-1111-1111-1111-111111111101', 'a0000000-0000-0000-0000-000000000001', 'confirmo');
-
--- A comment on the Eduard's report
-insert into report_comment (report_id, user_id, body) values
-('b1111111-1111-1111-1111-111111111101', 'a0000000-0000-0000-0000-000000000001',
- 'Protección Civil La Guaira confirmó el colapso. Hay equipos de rescate en camino desde Caracas.');
-
--- Seed chat message
-insert into chat_messages (channel, body, user_id) values
-('ops', 'Canal operativo activo. Por favor solo información verificada. 🙏', 'a0000000-0000-0000-0000-000000000001');
+  'admin@terremoto.ve',
+  '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LkZkSGxUXJG',
+  'Administrador',
+  'admin'
+) ON CONFLICT (id) DO NOTHING;
