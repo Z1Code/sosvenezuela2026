@@ -70,6 +70,25 @@ docker build -t sosvenezuela .
 docker run -d --env-file .env.prod -p 3000:3000 sosvenezuela
 ```
 
+## API pública
+
+Los datos son abiertos para fines humanitarios. Endpoints de **solo lectura** con **CORS abierto**
+(sin autenticación) — documentación completa en **https://sosvenezuela2026.com/docs**:
+
+| Endpoint | Descripción |
+|---|---|
+| `GET /api/reports` | Reportes del mapa (daños, acopios) — últimos 500 |
+| `GET /api/persons/list` | Directorio de personas (`?q=`, `?estado=`, `?limit=`, `?offset=`) |
+| `GET /api/persons/stats` | Cifras agregadas (desaparecidos / encontrados) |
+| `GET /api/damage/recent` | Últimos análisis de daño estructural |
+
+Límite ~90 req/min por IP. Cita la fuente como «SOS Venezuela 2026» y respeta la privacidad
+(no desanonimices cédulas, coordenadas ni menores). La escritura requiere iniciar sesión.
+
+## Contribuir
+
+¡Las contribuciones son bienvenidas! Lee [CONTRIBUTING.md](./CONTRIBUTING.md) para empezar.
+
 ## Seguridad
 
 - Ningún secreto se versiona: `.env*` está en `.gitignore` (excepto la plantilla `.env.example`).

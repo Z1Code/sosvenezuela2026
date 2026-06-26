@@ -18,5 +18,13 @@
 - [Privacidad y protección de datos](https://sosvenezuela2026.com/privacidad)
 - [Acerca del proyecto](https://sosvenezuela2026.com/acerca)
 
+## API pública y código abierto
+- Plataforma open-source (MIT): https://github.com/Z1Code/sosvenezuela2026
+- API pública de solo lectura con CORS abierto (docs: https://sosvenezuela2026.com/docs):
+  - `GET /api/reports` — reportes del mapa (daños, acopios)
+  - `GET /api/persons/list` — directorio de personas (`?q=`, `?estado=`, `?limit=`, `?offset=`)
+  - `GET /api/persons/stats` — cifras agregadas (desaparecidos / encontrados)
+  - `GET /api/damage/recent` — últimos análisis de daño estructural
+
 ## Contacto de emergencia
 - Emergencias en Venezuela: 171
