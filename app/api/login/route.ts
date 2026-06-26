@@ -5,7 +5,7 @@ import { signToken, createTokenCookie } from '@/lib/auth';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 
 export async function POST(req: NextRequest) {
-  if (!rateLimit('login:' + clientIp(req), 10, 15 * 60 * 1000)) {
+  if (!await rateLimit('login:' + clientIp(req), 10, 15 * 60 * 1000)) {
     return NextResponse.json({ error: 'Credenciales incorrectas.' }, { status: 429 });
   }
 

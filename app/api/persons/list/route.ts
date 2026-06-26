@@ -5,7 +5,7 @@ import { rateLimit, clientIp } from '@/lib/ratelimit';
 // Public, anti-scraping directory of persons (uses person_public — masked cédula,
 // no contact info). Rate-limited per IP; page size capped at 100.
 export async function GET(req: NextRequest) {
-  if (!rateLimit('plist:' + clientIp(req), 90, 60_000)) {
+  if (!await rateLimit('plist:' + clientIp(req), 90, 60_000)) {
     return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un momento.' }, { status: 429 });
   }
 

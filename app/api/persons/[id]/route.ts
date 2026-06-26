@@ -4,7 +4,7 @@ import { rateLimit, clientIp } from '@/lib/ratelimit';
 
 // Public enriched detail for one person (masked, no contact info). Rate-limited.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!rateLimit('pdetail:' + clientIp(req), 150, 60_000)) {
+  if (!await rateLimit('pdetail:' + clientIp(req), 150, 60_000)) {
     return NextResponse.json({ error: 'Demasiadas solicitudes.' }, { status: 429 });
   }
   const { id } = await params;

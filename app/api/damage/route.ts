@@ -12,7 +12,7 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR || '/app/uploads';
 
 // GET: cola de validación para ingenieros (submissions que el usuario aún no validó)
 export async function GET(req: NextRequest) {
-  if (!rateLimit('dmgq:' + clientIp(req), 120, 60_000)) return NextResponse.json({ error: 'rate' }, { status: 429 });
+  if (!await rateLimit('dmgq:' + clientIp(req), 120, 60_000)) return NextResponse.json({ error: 'rate' }, { status: 429 });
   const user = getUserFromRequest(req);
   const uid = user?.id || null;
   const res = await pool.query(
