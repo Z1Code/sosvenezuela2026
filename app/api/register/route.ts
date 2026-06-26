@@ -5,9 +5,11 @@ import { signToken, createTokenCookie } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   const { email, password, full_name } = await req.json();
-  if (!email || !password || password.length < 6) {
-    return NextResponse.json({ error: 'Email y contraseña (mín. 6 chars) requeridos.' }, { status: 400 });
+  
+  if (!email || !password || password.length < 8) {
+    return NextResponse.json({ error: 'Email y contraseña (mín. 8 caracteres) requeridos.' }, { status: 400 });
   }
+
   const hash = await bcrypt.hash(password, 10);
   try {
     const res = await pool.query(

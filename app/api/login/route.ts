@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import pool from '@/lib/db';
 import { signToken, createTokenCookie } from '@/lib/auth';
+import { rateLimit, clientIp } from '@/lib/ratelimit';
 
 export async function POST(req: NextRequest) {
+  if (!rateLimit('login:' + clientIp(req), 10, 15 * 60 * 1000)) {
+    return NextResponse.json({ error: 'Credenciales incorrectas.' }, { status: 429 });
+  }
+
   const { email, password } = await req.json();
   if (!email || !password) return NextResponse.json({ error: 'Faltan campos.' }, { status: 400 });
 
