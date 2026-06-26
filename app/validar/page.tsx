@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import BottomNav from '@/components/BottomNav';
+import DamageCarousel from '@/components/DamageCarousel';
 import Link from 'next/link';
 
 type Role = null | 'residente' | 'ingeniero';
@@ -24,7 +25,7 @@ export default function ValidarPage() {
         <p className="text-sm mb-6" style={{ color: 'var(--text-2)' }}>
           Vecinos suben fotos de estructuras dañadas; ingenieros y arquitectos validan si son habitables o no.
         </p>
-        {role === null && <RoleGate onPick={setRole} />}
+        {role === null && <><DamageCarousel /><RoleGate onPick={setRole} /></>}
         {role === 'residente' && <ResidentUpload />}
         {role === 'ingeniero' && <EngineerQueue />}
       </div>

@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
+import { mkdir, writeFile } from 'fs/promises';
 import { getUserFromRequest } from '@/lib/auth';
 import pool from '@/lib/db';
 import { moderarTexto } from '@/lib/moderacion';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
+
+// Las fotos se guardan como archivos en disco (servidos por nginx en /fotos/),
+// no como bytea en Postgres. UPLOAD_DIR se monta como volumen en el contenedor.
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '/app/uploads';
 
 // GET: cola de validación para ingenieros (submissions que el usuario aún no validó)
 export async function GET(req: NextRequest) {
@@ -32,14 +38,17 @@ export async function POST(req: NextRequest) {
 
   if (note) { const m = moderarTexto(note); if (m.bloqueado) return NextResponse.json({ error: 'Nota bloqueada: no incluyas datos de contacto ni dinero.' }, { status: 422 }); }
 
+  await mkdir(UPLOAD_DIR, { recursive: true }).catch(() => {});
   const ids: string[] = [];
   for (const p of photos) {
     const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(p || '');
     if (!m) continue;
     const buf = Buffer.from(m[2], 'base64');
     if (buf.length < 200 || buf.length > 6_000_000) continue;
-    const r = await pool.query('INSERT INTO person_photos (mime, data) VALUES ($1,$2) RETURNING id', [m[1], buf]);
-    ids.push('/api/photo/' + r.rows[0].id);
+    const ext = m[1] === 'image/png' ? 'png' : m[1] === 'image/webp' ? 'webp' : 'jpg';
+    const fname = randomUUID() + '.' + ext;
+    await writeFile(`${UPLOAD_DIR}/${fname}`, buf);
+    ids.push('/fotos/' + fname);
   }
   if (!ids.length) return NextResponse.json({ error: 'No se pudieron procesar las fotos.' }, { status: 400 });
 
