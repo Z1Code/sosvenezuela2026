@@ -119,6 +119,12 @@ export default function LandingPage() {
     fetch('/api/persons/stats').then(r => r.json()).then(setPstats).catch(() => {});
   }, []);
 
+  async function logout() {
+    await fetch('/api/logout', { method: 'POST' });
+    setAuthed(false);
+    window.location.reload();
+  }
+
   const allReports = useMemo(() => {
     const ids = new Set(reports.map(r => r.id));
     return [...reports, ...hazards.filter(h => !ids.has(h.id))];
@@ -181,13 +187,22 @@ export default function LandingPage() {
             </nav>
 
             <div className="flex items-center gap-2">
-              <Link href="/login" className="hidden sm:block">
-                <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                  className="px-4 py-2.5 rounded-xl text-[13px] font-semibold text-white sheen-card"
-                  style={{ background: 'var(--primary)', boxShadow: 'var(--shadow-teal)' }}>
-                  Reportar / Buscar
-                </motion.div>
-              </Link>
+              {authed ? (
+                <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                  onClick={logout}
+                  className="hidden sm:block px-4 py-2.5 rounded-xl text-[13px] font-semibold"
+                  style={{ border: '1px solid var(--border)', color: 'var(--text-1)', background: 'var(--surface)' }}>
+                  Cerrar sesión
+                </motion.button>
+              ) : (
+                <Link href="/login" className="hidden sm:block">
+                  <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                    className="px-4 py-2.5 rounded-xl text-[13px] font-semibold text-white sheen-card"
+                    style={{ background: 'var(--primary)', boxShadow: 'var(--shadow-teal)' }}>
+                    Iniciar sesión
+                  </motion.div>
+                </Link>
+              )}
               <button onClick={() => setMenuOpen(o => !o)} aria-label="Abrir menú" aria-expanded={menuOpen}
                 className="md:hidden flex items-center justify-center w-11 h-11 rounded-xl transition-colors"
                 style={{ border: '1px solid var(--border)', background: 'rgba(255,255,255,0.7)', color: 'var(--text-1)' }}>
@@ -255,11 +270,19 @@ export default function LandingPage() {
                       {item.label}
                     </Link>
                   ))}
-                  <Link href="/login" onClick={() => setMenuOpen(false)}
-                    className="block px-3 py-3 rounded-xl text-sm font-semibold text-center text-white mt-2"
-                    style={{ background: 'var(--primary)', boxShadow: 'var(--shadow-teal)' }}>
-                    Reportar / Buscar persona
-                  </Link>
+                  {authed ? (
+                    <button onClick={() => { logout(); setMenuOpen(false); }}
+                      className="block w-full px-3 py-3 rounded-xl text-sm font-semibold text-center mt-2"
+                      style={{ border: '1px solid var(--border)', color: 'var(--text-1)', background: 'var(--surface)' }}>
+                      Cerrar sesión
+                    </button>
+                  ) : (
+                    <Link href="/login" onClick={() => setMenuOpen(false)}
+                      className="block px-3 py-3 rounded-xl text-sm font-semibold text-center text-white mt-2"
+                      style={{ background: 'var(--primary)', boxShadow: 'var(--shadow-teal)' }}>
+                      Iniciar sesión
+                    </Link>
+                  )}
                 </div>
               </motion.nav>
             )}

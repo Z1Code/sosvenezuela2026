@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 
 const SECRET = process.env.JWT_SECRET!;
 const COOKIE = 'tk';
+const SECURE = process.env.NODE_ENV === 'production' ? '; Secure' : '';
 
 export interface TokenPayload {
   id: string;
@@ -37,9 +38,9 @@ export function getUserFromRequest(req: NextRequest): TokenPayload | null {
 }
 
 export function createTokenCookie(token: string): string {
-  return `${COOKIE}=${token}; HttpOnly; Path=/; Max-Age=${7 * 24 * 3600}; SameSite=Lax`;
+  return `${COOKIE}=${token}; HttpOnly; Path=/; Max-Age=${7 * 24 * 3600}; SameSite=Lax${SECURE}`;
 }
 
 export function createLogoutCookie(): string {
-  return `${COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`;
+  return `${COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${SECURE}`;
 }

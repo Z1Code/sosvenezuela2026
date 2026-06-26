@@ -1,5 +1,5 @@
 'use client';
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
@@ -11,6 +11,12 @@ function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/';
+
+  useEffect(() => {
+    fetch('/api/me').then(r => r.json()).then(d => {
+      if (d.user) router.replace(redirect);
+    }).catch(() => {});
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -77,8 +83,8 @@ function RegisterForm() {
               style={{ border: '1.5px solid #E2E8F0', background: '#F8FAFC' }} placeholder="tu@correo.com" />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: '#475569' }}>Contraseña (mín. 6 chars)</label>
-            <input type="password" required minLength={6} value={form.password} onChange={e => setForm(f => ({...f, password: e.target.value}))}
+            <label className="block text-xs font-medium mb-1.5" style={{ color: '#475569' }}>Contraseña (mín. 8 caracteres)</label>
+            <input type="password" required minLength={8} value={form.password} onChange={e => setForm(f => ({...f, password: e.target.value}))}
               className="w-full rounded-xl px-4 py-3 text-sm outline-none"
               style={{ border: '1.5px solid #E2E8F0', background: '#F8FAFC' }} placeholder="········" />
           </div>
