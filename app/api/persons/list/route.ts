@@ -16,17 +16,35 @@ export async function GET(req: NextRequest) {
   const estado = sp.get('estado');
 
   const params: (string | number)[] = [];
+  const hasQ = q.length >= 2;
+  let join = '';
   let where = '1=1';
-  if (q.length >= 2) { params.push('%' + q + '%'); where += ` AND display_name ILIKE $${params.length}`; }
-  if (estado === 'seeking_info' || estado === 'found_alive') { params.push(estado); where += ` AND status = $${params.length}`; }
+  let qp = 0;
+
+  // Búsqueda difusa (acentos/orden/tipeo) sobre el nombre real (full_name),
+  // devolviendo siempre el display_name enmascarado de person_public.
+  if (hasQ) {
+    params.push(q); qp = params.length;
+    join = 'JOIN person_reports r ON r.id = p.id';
+    where += ` AND ( f_unaccent(r.full_name) % f_unaccent($${qp})
+                     OR f_unaccent(r.full_name) ILIKE '%' || f_unaccent($${qp}) || '%' )`;
+  }
+  if (estado === 'seeking_info' || estado === 'found_alive') { params.push(estado); where += ` AND p.status = $${params.length}`; }
   params.push(limit); const lp = params.length;
   params.push(offset); const op = params.length;
 
+  const orderBy = hasQ
+    ? `GREATEST(similarity(f_unaccent(r.full_name), f_unaccent($${qp})),
+                word_similarity(f_unaccent($${qp}), f_unaccent(r.full_name))) DESC,
+       (p.photo_path IS NOT NULL) DESC, p.source_date DESC`
+    : `(p.photo_path IS NOT NULL) DESC, p.source_date DESC`;
+
   const res = await pool.query(
-    `SELECT id, status, cedula_masked, display_name, municipio, parroquia, hospital_name, photo_path, source_date
-     FROM person_public
+    `SELECT p.id, p.status, p.cedula_masked, p.display_name, p.municipio, p.parroquia, p.hospital_name, p.photo_path, p.source_date
+     FROM person_public p
+     ${join}
      WHERE ${where}
-     ORDER BY (photo_path IS NOT NULL) DESC, source_date DESC
+     ORDER BY ${orderBy}
      LIMIT $${lp} OFFSET $${op}`,
     params
   );

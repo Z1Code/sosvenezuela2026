@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict Qo9Vnrtnbt1IBtcZlqzlLxzAZFVpKRf8mP3wKaFrwF156WkJV6dhlZAGwc56MGN
+\restrict OdMamPjiV1fEkErBbs3TazHrCGUopCI5NKhomWKRaDVmqUEYFtR1zVRbGA5Y4BY
 
 -- Dumped from database version 18.4 (eaf151e)
 -- Dumped by pg_dump version 18.4 (Debian 18.4-1.pgdg13+1)
@@ -18,6 +18,34 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+--
+-- Name: pg_trgm; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pg_trgm; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pg_trgm IS 'text similarity measurement and index searching based on trigrams';
+
+
+--
+-- Name: unaccent; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION unaccent; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION unaccent IS 'text search dictionary that removes accents';
+
 
 --
 -- Name: building_type; Type: TYPE; Schema: public; Owner: -
@@ -175,6 +203,15 @@ begin
   insert into incident_precise (report_id, lat, lng) values (v_id, p_lat, p_lng);
   return v_id;
 end $$;
+
+
+--
+-- Name: f_unaccent(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.f_unaccent(text) RETURNS text
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $_$ SELECT public.unaccent('public.unaccent', $1) $_$;
 
 
 --
@@ -820,6 +857,13 @@ CREATE INDEX idx_news_published ON public.news_articles USING btree (published_a
 
 
 --
+-- Name: idx_preports_fullname_trgm; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_preports_fullname_trgm ON public.person_reports USING gin (public.f_unaccent(full_name) public.gin_trgm_ops);
+
+
+--
 -- Name: moderacion_intentos_user_id_created_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1087,7 +1131,7 @@ ALTER TABLE ONLY public.watch_subscriptions
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Qo9Vnrtnbt1IBtcZlqzlLxzAZFVpKRf8mP3wKaFrwF156WkJV6dhlZAGwc56MGN
+\unrestrict OdMamPjiV1fEkErBbs3TazHrCGUopCI5NKhomWKRaDVmqUEYFtR1zVRbGA5Y4BY
 
 
 -- ============================================================
