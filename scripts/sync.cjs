@@ -233,6 +233,24 @@ async function mirrorPhotos(cap = 800) {
   return { intentadas: rows.length, ok, fail };
 }
 
+// Etiqueta reportes nuevos con su respuesta sísmica del suelo (USGS Global Vs30 → clase NEHRP).
+const VS30_SVC = 'https://earthquake.usgs.gov/arcgis/rest/services/eq/vs30_mosaic/MapServer/identify';
+function vs30Class(vs) { if (vs == null || !Number.isFinite(vs)) return null; if (vs < 180) return 'E'; if (vs < 360) return 'D'; if (vs < 760) return 'C'; return 'B'; }
+async function tagVs30(cap = 300) {
+  const rows = (await pool.query("select id, lat_pub, lng_pub from hazard_reports where deleted_at is null and lat_pub is not null and site_vs30 is null limit $1", [cap])).rows;
+  let ok = 0;
+  for (const r of rows) {
+    try {
+      const ext = `${r.lng_pub - 0.05},${r.lat_pub - 0.05},${r.lng_pub + 0.05},${r.lat_pub + 0.05}`;
+      const u = `${VS30_SVC}?geometry=${encodeURIComponent(JSON.stringify({ x: r.lng_pub, y: r.lat_pub }))}&geometryType=esriGeometryPoint&sr=4326&layers=all&tolerance=2&mapExtent=${ext}&imageDisplay=400,400,96&returnGeometry=false&f=json`;
+      const j = await (await fetch(u, { signal: AbortSignal.timeout(15000) })).json();
+      const v = parseInt(((j.results || [])[0]?.attributes || {})['Classify.Pixel Value']);
+      if (Number.isFinite(v)) { await pool.query('update hazard_reports set site_vs30=$1, site_class=$2 where id=$3', [v, vs30Class(v), r.id]); ok++; }
+    } catch { /* skip */ }
+  }
+  return { intentados: rows.length, etiquetados: ok };
+}
+
 (async () => {
   const ts = new Date().toISOString();
   try { console.log(ts, 'PERSONS', JSON.stringify(await syncPersons())); } catch (e) { console.error(ts, 'PERSONS_ERR', e.message); }
@@ -244,5 +262,6 @@ async function mirrorPhotos(cap = 800) {
   // en la DB (no escala). Las fotos espejadas se sirven como archivos estáticos desde
   // el VPS (/fotos/) y las nuevas personas usan su URL de origen directamente.
   // try { console.log(ts, 'MIRROR', JSON.stringify(await mirrorPhotos())); } catch (e) { console.error(ts, 'MIRROR_ERR', e.message); }
+  try { console.log(ts, 'VS30', JSON.stringify(await tagVs30())); } catch (e) { console.error(ts, 'VS30_ERR', e.message); }
   await pool.end();
 })().catch(e => { console.error('FATAL', e.message); process.exit(1); });
