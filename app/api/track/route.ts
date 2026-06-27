@@ -4,7 +4,7 @@ import pool from '@/lib/db';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 
 export async function POST(req: NextRequest) {
-  if (!rateLimit('trk:' + clientIp(req), 120, 60_000)) return NextResponse.json({ ok: false }, { status: 429 });
+  if (!await rateLimit('trk:' + clientIp(req), 120, 60_000)) return NextResponse.json({ ok: false }, { status: 429 });
 
   let path = '/';
   let ref = '';

@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
 import pool from '@/lib/db';
 import { moderarTexto } from '@/lib/moderacion';
+import { rateLimit, clientIp } from '@/lib/ratelimit';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!await rateLimit('chat:' + clientIp(req), 30, 60_000))
+    return NextResponse.json({ error: 'Demasiadas solicitudes.' }, { status: 429 });
+
+  const user = getUserFromRequest(req);
+  if (!user) return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
+
   const res = await pool.query(
     `SELECT cm.id, cm.body, cm.created_at, u.full_name
      FROM chat_messages cm
